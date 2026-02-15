@@ -4,6 +4,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/identity"
@@ -62,7 +64,9 @@ func NodeConfig(lnc *datapath.LocalNodeConfiguration) Node {
 	node.HashInit6Seed = lnc.MaglevConfig.SeedJhash1
 
 	node.EventsMapRateLimit = option.Config.BPFEventsDefaultRateLimit
+	fmt.Printf("!!! debug_msg: EventsMapRateLimit=%d", node.EventsMapRateLimit)
 	node.EventsMapBurstLimit = option.Config.BPFEventsDefaultBurstLimit
+	fmt.Printf("!!! debug_msg: EventsMapBurstLimit=%d", node.EventsMapBurstLimit)
 
 	return node
 }
