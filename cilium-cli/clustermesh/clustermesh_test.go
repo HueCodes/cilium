@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"helm.sh/helm/v3/pkg/release"
+	releasev1 "helm.sh/helm/v4/pkg/release/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes/fake"
@@ -881,7 +881,7 @@ func TestUpdateCABundleInValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rel := &release.Release{Config: tt.releaseConfig}
+			rel := &releasev1.Release{Config: tt.releaseConfig}
 
 			initialContent, _, _ := unstructured.NestedString(rel.Config, "tls", "caBundle", "content")
 

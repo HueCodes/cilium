@@ -23,7 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v4/pkg/release"
+	releasev1 "helm.sh/helm/v4/pkg/release/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1109,7 +1110,7 @@ func DisableWithHelm(ctx context.Context, k8sClient *k8s.Client, params Paramete
 	return err
 }
 
-func getRelease(kc *k8s.Client, params Parameters) (*release.Release, error) {
+func getRelease(kc *k8s.Client, params Parameters) (release.Releaser, error) {
 	return kc.HelmActionConfig.Releases.Last(params.HelmReleaseName)
 }
 
@@ -1162,7 +1163,13 @@ type ClusterState struct {
 	remoteClusterNamesAi      []string                  // names of remote clusters for remove sections
 }
 
-func processLocalClient(localRelease *release.Release) (*ClusterState, error) {
+func processLocalClient(localRelease release.Releaser) (*ClusterState, error) {
+	// Cast to concrete v1.Release type to access Config
+	rel, ok := localRelease.(*releasev1.Release)
+	if !ok {
+		return nil, fmt.Errorf("release is not a v1 release")
+	}
+
 	state := &ClusterState{
 		localOldClusters:          make(map[string]any),
 		localDisabledClusters:     make(map[string]any),
@@ -1177,7 +1184,7 @@ func processLocalClient(localRelease *release.Release) (*ClusterState, error) {
 	}
 	var err error
 
-	state.localOldClusters, state.localDisabledClusters, err = getClustersFromValues(localRelease.Config)
+	state.localOldClusters, state.localDisabledClusters, err = getClustersFromValues(rel.Config)
 	if err != nil {
 		return state, err
 	}
@@ -1231,7 +1238,13 @@ func (k *K8sClusterMesh) processSingleRemoteClient(ctx context.Context, remoteCl
 		return err
 	}
 
-	remoteOldClusters, remoteDisabledClusters, err := getClustersFromValues(remoteRelease.Config)
+	// Cast to concrete v1.Release type to access Config
+	remoteRel, ok := remoteRelease.(*releasev1.Release)
+	if !ok {
+		return fmt.Errorf("remote release is not a v1 release")
+	}
+
+	remoteOldClusters, remoteDisabledClusters, err := getClustersFromValues(remoteRel.Config)
 	if err != nil {
 		return err
 	}
@@ -1303,7 +1316,7 @@ func convertClustersToListClusterMesh(clusters map[string]any) []any {
 // setClustersInValues sets the clusters in the release values. We cannot use
 // unstructured.SetNestedField here since clusters map has typed field that
 // unstructued does not support
-func setClustersInValues(release *release.Release, client *k8s.Client, clusters any) error {
+func setClustersInValues(release *releasev1.Release, client *k8s.Client, clusters any) error {
 	if _, ok := release.Config["clustermesh"]; !ok {
 		release.Config["clustermesh"] = map[string]any{}
 	}
@@ -1325,7 +1338,7 @@ func setClustersInValues(release *release.Release, client *k8s.Client, clusters 
 	return nil
 }
 
-func updateCABundleInValues(clusterName string, release *release.Release, clustersCA map[string]string) error {
+func updateCABundleInValues(clusterName string, release *releasev1.Release, clustersCA map[string]string) error {
 	content, _, err := unstructured.NestedString(release.Config, "tls", "caBundle", "content")
 	if err != nil {
 		return fmt.Errorf("existing tls.caBundle values are invalid for cluster %s: %w", clusterName, err)
@@ -1372,14 +1385,21 @@ func updateCABundleInValues(clusterName string, release *release.Release, cluste
 }
 
 func (k *K8sClusterMesh) helmUpgradeClusters(ctx context.Context, client *k8s.Client, clusters, disabledClusters map[string]any, clustersCA map[string]string) error {
-	release, err := getRelease(client, k.params)
+	rel, err := getRelease(client, k.params)
 	if err != nil {
 		return err
+	}
+
+	// Cast to concrete v1.Release type to access Config and Chart
+	release, ok := rel.(*releasev1.Release)
+	if !ok {
+		return fmt.Errorf("release is not a v1 release")
 	}
 
 	var clustersRaw any
 	clustersRaw = clusters
 
+	// release.Chart is already a *chartv2.Chart
 	version, err := versioncheck.Version(release.Chart.Metadata.Version)
 	if err != nil {
 		return fmt.Errorf("Failed to parse Helm chart version %s on cluster %s: %w", release.Chart.Metadata.Version, client.ClusterName(), err)
@@ -1594,8 +1614,13 @@ func (k *K8sClusterMesh) retrieveRemoteClusters(ctx context.Context, remoteClien
 			k.Log("❌ Unable to find Helm release for the remote cluster")
 			return nil, nil, err
 		}
+		// Cast to concrete v1.Release type to access Config
+		remoteRel, ok := remoteRelease.(*releasev1.Release)
+		if !ok {
+			return nil, nil, fmt.Errorf("remote release is not a v1 release")
+		}
 		// Modify the clustermesh config to remove the intended cluster if any
-		remoteClusters, remoteDisabledClusters, err := removeFromClustermeshConfig(remoteRelease.Config, remoteClusterNames)
+		remoteClusters, remoteDisabledClusters, err := removeFromClustermeshConfig(remoteRel.Config, remoteClusterNames)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1658,6 +1683,12 @@ func (k *K8sClusterMesh) DisconnectWithHelm(ctx context.Context) error {
 		return err
 	}
 
+	// Cast to concrete v1.Release type to access Config
+	localRel, ok := localRelease.(*releasev1.Release)
+	if !ok {
+		return fmt.Errorf("local release is not a v1 release")
+	}
+
 	remoteClients, err := k.getRemoteClients()
 	if err != nil {
 		return err
@@ -1669,7 +1700,7 @@ func (k *K8sClusterMesh) DisconnectWithHelm(ctx context.Context) error {
 
 	// Modify the clustermesh config to remove the intended cluster if any
 	var localClusters map[string]any
-	localClusters, clusterState.localDisabledClusters, err = removeFromClustermeshConfig(localRelease.Config, clusterState.remoteClusterNamesAi)
+	localClusters, clusterState.localDisabledClusters, err = removeFromClustermeshConfig(localRel.Config, clusterState.remoteClusterNamesAi)
 	if err != nil {
 		return err
 	}
