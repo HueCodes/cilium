@@ -234,10 +234,10 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 		cDefinesMap["STRICT_IPV4_NET"] = fmt.Sprintf("%#x", byteorder.NetIPAddrToHost32(option.Config.EncryptionStrictEgressCIDR.Addr()))
 		cDefinesMap["STRICT_IPV4_NET_SIZE"] = fmt.Sprintf("%d", option.Config.EncryptionStrictEgressCIDR.Bits())
 
-		cDefinesMap["IPV4_ENCRYPT_IFACE"] = fmt.Sprintf("%#x", byteorder.NetIPv4ToHost32(cfg.NodeIPv4))
+		cDefinesMap["IPV4_ENCRYPT_IFACE"] = fmt.Sprintf("%#x", byteorder.NetIPAddrToHost32(cfg.NodeIPv4))
 
-		ipv4Interface, ok := netip.AddrFromSlice(cfg.NodeIPv4.To4())
-		if !ok {
+		ipv4Interface := cfg.NodeIPv4
+		if !ipv4Interface.IsValid() {
 			return fmt.Errorf("unable to parse node IPv4 address %s", cfg.NodeIPv4)
 		}
 
