@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -607,9 +608,9 @@ func (r *infraIPAllocator) extractCiliumHostIPFromFS() (net.IP, net.IP) {
 func (r *infraIPAllocator) allocateServiceLoopbackIPs() error {
 	if r.daemonConfig.EnableIPv6 {
 		// Allocate IPv6 service loopback IP
-		serviceLoopbackIPv6 := net.ParseIP(r.config.ServiceLoopbackIPv6)
-		if serviceLoopbackIPv6 == nil {
-			return fmt.Errorf("invalid IPv6 service loopback address %s", r.config.ServiceLoopbackIPv6)
+		serviceLoopbackIPv6, err := netip.ParseAddr(r.config.ServiceLoopbackIPv6)
+		if err != nil {
+			return fmt.Errorf("invalid IPv6 service loopback address %s: %w", r.config.ServiceLoopbackIPv6, err)
 		}
 		r.localNodeStore.Update(func(n *node.LocalNode) { n.Local.ServiceLoopbackIPv6 = serviceLoopbackIPv6 })
 		r.logger.Debug("Allocated IPv6 service loopback address", logfields.IPAddr, serviceLoopbackIPv6)
@@ -617,9 +618,9 @@ func (r *infraIPAllocator) allocateServiceLoopbackIPs() error {
 
 	if r.daemonConfig.EnableIPv4 {
 		// Allocate IPv4 service loopback IP
-		serviceLoopbackIPv4 := net.ParseIP(r.config.ServiceLoopbackIPv4)
-		if serviceLoopbackIPv4 == nil {
-			return fmt.Errorf("invalid IPv4 service loopback address %s", r.config.ServiceLoopbackIPv4)
+		serviceLoopbackIPv4, err := netip.ParseAddr(r.config.ServiceLoopbackIPv4)
+		if err != nil {
+			return fmt.Errorf("invalid IPv4 service loopback address %s: %w", r.config.ServiceLoopbackIPv4, err)
 		}
 		r.localNodeStore.Update(func(n *node.LocalNode) { n.Local.ServiceLoopbackIPv4 = serviceLoopbackIPv4 })
 		r.logger.Debug("Allocated IPv4 service loopback address", logfields.IPAddr, serviceLoopbackIPv4)
