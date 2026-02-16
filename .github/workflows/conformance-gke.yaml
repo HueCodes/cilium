@@ -293,17 +293,6 @@ jobs:
         with:
           label: ${{ github.event_name == 'workflow_dispatch' && inputs.PR-number || github.ref_name }}
 
-      - name: Get connectivity test flags
-        id: e2e_config
-        uses: ./.github/actions/cli-test-config
-        with:
-          external-target: 'google.com.'
-          external-cidr: '8.0.0.0/8'
-          external-ip: '8.8.8.8'
-          external-other-ip: '8.8.4.4'
-          hubble: false
-          test-concurrency: 5
-
       - name: Set up job variables
         id: vars
         run: |
@@ -316,11 +305,7 @@ jobs:
             --helm-set=loadBalancer.l7.backend=envoy \
             --wait=false"
 
-          CONNECTIVITY_TEST_DEFAULTS="${{ steps.e2e_config.outputs.test_flags }}"
-
           echo cilium_install_defaults=${CILIUM_INSTALL_DEFAULTS} >> $GITHUB_OUTPUT
-          echo hubble_enable_defaults=${HUBBLE_ENABLE_DEFAULTS} >> $GITHUB_OUTPUT
-          echo connectivity_test_defaults=${CONNECTIVITY_TEST_DEFAULTS} >> $GITHUB_OUTPUT
           echo sha=${{ steps.default_vars.outputs.sha }} >> $GITHUB_OUTPUT
           echo owner=${OWNER} >> $GITHUB_OUTPUT
 
@@ -357,6 +342,31 @@ jobs:
           nodes: ${{ matrix.config.nodes || 2 }}
           machine-type: e2-custom-2-4096
           labels: "usage=${{ github.repository_owner }}-${{ github.event.repository.name }},owner=${{ steps.vars.outputs.owner }}"
+
+      - name: Add external targets to kind cluster
+        uses: ./.github/actions/generic-external-targets
+        id: external_targets
+        with:
+          ipv4_external_cidr: ${{ steps.create-cluster.outputs.native_cidr }}
+
+      - name: Get connectivity test flags
+        id: e2e_config
+        uses: ./.github/actions/cli-test-config
+        with:
+          external-target: '{{ steps.external_targets.outputs.external_target_name }}'
+          external-other-target: '{{ steps.external_targets.outputs.other_external_target_name }}'
+          external-cidr: '{{ steps.create-cluster.outputs.native_cidr }}'
+          external-ip: '{{ steps.external_targets.outputs.ipv4_external_target }}'
+          external-other-ip: '{{ steps.external_targets.outputs.ipv4_other_external_target }}'
+          hubble: false
+          test-concurrency: 5
+
+      - name: Set up job variables for connectivity tests
+        id: vars-conn
+        run: |
+          CONNECTIVITY_TEST_DEFAULTS="${{ steps.e2e_config.outputs.test_flags }}"
+
+          echo connectivity_test_defaults=${CONNECTIVITY_TEST_DEFAULTS} >> $GITHUB_OUTPUT
 
       - name: Create ESP allow firewall rule
         if: ${{ matrix.config.type == 'tunnel-ipsec' }}
@@ -420,7 +430,7 @@ jobs:
       - name: Run connectivity test (${{ matrix.k8s.version }}, ${{ matrix.config.index }}, ${{ matrix.config.type }})
         id: run-tests
         run: |
-          cilium connectivity test ${{ steps.vars.outputs.connectivity_test_defaults }} \
+          cilium connectivity test ${{ steps.vars-conn.outputs.connectivity_test_defaults }} \
           --junit-file "cilium-junits/${{ env.job_name }} (${{ join(matrix.k8s.*, ', ') }}, ${{ join(matrix.config.*, ', ') }}).xml" \
           --junit-property github_job_step="Run connectivity test (${{ matrix.k8s.version }}, ${{ matrix.config.index }}, ${{ matrix.config.type }})"
 
