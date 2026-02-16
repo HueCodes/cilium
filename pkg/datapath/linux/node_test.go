@@ -4,6 +4,7 @@
 package linux
 
 import (
+	"net/netip"
 	"testing"
 
 	"github.com/cilium/hive/hivetest"
@@ -30,8 +31,8 @@ var (
 	nodeConfig = datapath.LocalNodeConfiguration{
 		NodeIPv4:            fakeNodeAddressing.IPv4().PrimaryExternal(),
 		NodeIPv6:            fakeNodeAddressing.IPv6().PrimaryExternal(),
-		CiliumInternalIPv4:  fakeNodeAddressing.IPv4().Router(),
-		CiliumInternalIPv6:  fakeNodeAddressing.IPv6().Router(),
+		CiliumInternalIPv4:  netip.MustParseAddr(fakeNodeAddressing.IPv4().Router().String()),
+		CiliumInternalIPv6:  netip.MustParseAddr(fakeNodeAddressing.IPv6().Router().String()),
 		DeviceMTU:           calcMtu.DeviceMTU,
 		RouteMTU:            calcMtu.RouteMTU,
 		RoutePostEncryptMTU: calcMtu.RoutePostEncryptMTU,
@@ -62,8 +63,8 @@ func TestCreateNodeRoute(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, *c1.IPNet, generatedRoute.Prefix)
 	require.Equal(t, dpConfig.HostDevice, generatedRoute.Device)
-	require.Equal(t, fakeNodeAddressing.IPv4().Router(), *generatedRoute.Nexthop)
-	require.Equal(t, fakeNodeAddressing.IPv4().Router(), generatedRoute.Local)
+	require.True(t, fakeNodeAddressing.IPv4().Router().Equal(*generatedRoute.Nexthop), "Nexthop IP mismatch")
+	require.True(t, fakeNodeAddressing.IPv4().Router().Equal(generatedRoute.Local), "Local IP mismatch")
 
 	c1 = cidr.MustParseCIDR("beef:beef::/48")
 	generatedRoute, err = nodeHandler.createNodeRouteSpec(c1, false)
@@ -71,7 +72,7 @@ func TestCreateNodeRoute(t *testing.T) {
 	require.Equal(t, *c1.IPNet, generatedRoute.Prefix)
 	require.Equal(t, dpConfig.HostDevice, generatedRoute.Device)
 	require.Nil(t, generatedRoute.Nexthop)
-	require.Equal(t, fakeNodeAddressing.IPv6().Router(), generatedRoute.Local)
+	require.True(t, fakeNodeAddressing.IPv6().Router().Equal(generatedRoute.Local), "Local IPv6 mismatch")
 }
 
 func TestCreateNodeRouteSpecMtu(t *testing.T) {
