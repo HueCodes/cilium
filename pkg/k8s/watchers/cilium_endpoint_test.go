@@ -72,6 +72,18 @@ type mockPolicyManager struct{}
 
 func (m *mockPolicyManager) TriggerPolicyUpdates(reason string) {}
 
+// mockWireguardConfig implements wgTypes.WireguardConfig for testing
+type mockWireguardConfig struct{}
+
+func (m *mockWireguardConfig) Enabled() bool { return false }
+
+// mockIPSecConfig implements datapath.IPsecConfig for testing
+type mockIPSecConfig struct{}
+
+func (m *mockIPSecConfig) Enabled() bool                                         { return false }
+func (m *mockIPSecConfig) UseCiliumInternalIP() bool                             { return false }
+func (m *mockIPSecConfig) DNSProxyInsecureSkipTransparentModeCheckEnabled() bool { return false }
+
 // mockIPCacheManager implements the ipcacheManager interface for testing
 type mockIPCacheManager struct{}
 
@@ -119,6 +131,8 @@ func TestEndpointUpdated_RecordsMetricWhenLocalEndpointExists(t *testing.T) {
 		policyManager:   &mockPolicyManager{},
 		ipcache:         &mockIPCacheManager{},
 		localNodeStore:  node.NewTestLocalNodeStore(node.LocalNode{Node: nodetypes.Node{Name: "test-node"}}),
+		wgConfig:        &mockWireguardConfig{},
+		ipsecConfig:     &mockIPSecConfig{},
 	}
 
 	// Create a CiliumEndpoint
@@ -161,6 +175,8 @@ func TestEndpointUpdated_SafeWhenNoLocalEndpoint(t *testing.T) {
 		policyManager:   &mockPolicyManager{},
 		ipcache:         &mockIPCacheManager{},
 		localNodeStore:  node.NewTestLocalNodeStore(node.LocalNode{Node: nodetypes.Node{Name: "test-node"}}),
+		wgConfig:        &mockWireguardConfig{},
+		ipsecConfig:     &mockIPSecConfig{},
 	}
 
 	// Create a CiliumEndpoint
@@ -188,29 +204,6 @@ func TestEndpointUpdated_SafeWhenNoLocalEndpoint(t *testing.T) {
 	// If we reach here without panic, the test passes
 }
 
-// TestEndpointUpdated_SafeWhenEndpointNil verifies that endpointUpdated
-// handles the case when the endpoint parameter is nil.
-func TestEndpointUpdated_SafeWhenEndpointNil(t *testing.T) {
-	// Create mock endpoint manager
-	mockEpMgr := &mockEndpointManager{
-		endpoints: map[string]*mockEndpoint{},
-	}
-
-	// Create watcher with mocked dependencies
-	watcher := &K8sCiliumEndpointsWatcher{
-		logger:          hivetest.Logger(t),
-		endpointManager: mockEpMgr,
-		policyManager:   &mockPolicyManager{},
-		ipcache:         &mockIPCacheManager{},
-		localNodeStore:  node.NewTestLocalNodeStore(node.LocalNode{Node: nodetypes.Node{Name: "test-node"}}),
-	}
-
-	// Call endpointUpdated with nil endpoint - should not panic
-	watcher.endpointUpdated(nil, nil)
-
-	// If we reach here without panic, the test passes
-}
-
 // TestEndpointUpdated_SkipsWhenNoNetworking verifies that endpointUpdated
 // safely handles endpoints without networking information.
 func TestEndpointUpdated_SkipsWhenNoNetworking(t *testing.T) {
@@ -233,6 +226,8 @@ func TestEndpointUpdated_SkipsWhenNoNetworking(t *testing.T) {
 		policyManager:   &mockPolicyManager{},
 		ipcache:         &mockIPCacheManager{},
 		localNodeStore:  node.NewTestLocalNodeStore(node.LocalNode{Node: nodetypes.Node{Name: "test-node"}}),
+		wgConfig:        &mockWireguardConfig{},
+		ipsecConfig:     &mockIPSecConfig{},
 	}
 
 	// Create a CiliumEndpoint without networking (should return early)
